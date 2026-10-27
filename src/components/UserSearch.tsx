@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import UserCard from './UserCard';
+import RencentSearches from './RecentRearches';
 
 const UserSearch = () => {
   const [username, setUsername] = useState('');
   const [submittedUsername, setSubmittedUsername] = useState('');
+  const [recentUsers, setRecentusers] = useState<string[]> ([]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['users', submittedUsername],
@@ -40,7 +42,14 @@ const UserSearch = () => {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSubmittedUsername(username.trim());
+    const trimmed = username.trim();
+    if(!trimmed) return;
+    setSubmittedUsername(trimmed);
+
+    setRecentusers((prev) => {
+      const updated = [trimmed, ...prev.filter((u) => u !== trimmed)];
+      return updated.slice(0, 5);
+    });
   };
 
   return (
@@ -61,6 +70,17 @@ const UserSearch = () => {
       {data && (
         <UserCard user={data} />
       )}
+
+      {
+        recentUsers.length > 0 && (
+          <RencentSearches users={recentUsers} 
+          onSelect={(usename)=>{
+            setUsername(usename)
+            setSubmittedUsername(usename)
+          
+          }} />
+        )
+      }
     </>
   );
 };
