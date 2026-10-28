@@ -5,9 +5,10 @@ type RecentSearchesPros={
 
     users:string[];
     onSelect: (user:string)=>void;
+    onPrefetch: (user:string)=>void;
 }
 
-const RencentSearches = ({users, onSelect}:RecentSearchesPros) => {
+const RencentSearches = ({users, onSelect, onPrefetch}:RecentSearchesPros) => {
     return ( <>
     {
         
@@ -23,6 +24,7 @@ const RencentSearches = ({users, onSelect}:RecentSearchesPros) => {
                     onClick={() => {
                       onSelect(user);
                     }}
+                    onMouseEnter={() => onPrefetch(user)}
                   >
                     <FaUser className='user-icon' />
                     {user}

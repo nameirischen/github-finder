@@ -1,14 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import UserCard from './UserCard';
 import RencentSearches from './RecentRearches';
+import {useQueryClient} from '@tanstack/react-query'
+import {fetchGitHubUser, searchGitHubUsers} from '../api/github';
+import { useDebounce } from 'use-debounce';
+import SuggestionDropdown from './SuggestionDropdown';
+
 
 const UserSearch = () => {
   const [username, setUsername] = useState('');
   const [submittedUsername, setSubmittedUsername] = useState('');
-  const [recentUsers, setRecentusers] = useState<string[]> ([]);
+  
+  const [recentUsers, setRecentUsers] = useState<string[]>(() => {
+  const stored = localStorage.getItem('recentUsers');
+  return stored ? JSON.parse(stored) : [];
+});
+  useEffect(()=>{
+    localStorage.setItem('recentUsers', JSON.stringify(recentUsers))
+  },[recentUsers])
 
-  const { data, isLoading, error } = useQuery({
+  const queryClient = useQueryClient();
+
+  const [debouncedUsername] = useDebounce(username, 300);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['users', submittedUsername],
     queryFn: async () => {
       const token = import.meta.env.VITE_GITHUB_API_TOKEN;
@@ -40,13 +62,22 @@ const UserSearch = () => {
     enabled: !!submittedUsername,
   });
 
+  // Fetch suggestions from GitHub's search API
+  const { data: suggestions } = useQuery({
+    queryKey: ['github-user-suggestions', debouncedUsername],
+    queryFn: () => searchGitHubUsers(debouncedUsername),
+    enabled: debouncedUsername.length > 1,
+  });
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = username.trim();
     if(!trimmed) return;
     setSubmittedUsername(trimmed);
+    setUsername('')
+    setShowSuggestions(false)
 
-    setRecentusers((prev) => {
+    setRecentUsers((prev) => {
       const updated = [trimmed, ...prev.filter((u) => u !== trimmed)];
       return updated.slice(0, 5);
     });
@@ -55,12 +86,41 @@ const UserSearch = () => {
   return (
     <>
       <form onSubmit={handleSubmit} className='form'>
-        <input
-          type='text'
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder='Enter GitHub username'
-        />
+        <div className='dropdown-wrapper'>
+          <input
+            type='text'
+            value={username}
+            onChange={(e) => {
+              const val = e.target.value;
+              setUsername(val);
+              setShowSuggestions(val.trim().length > 1);
+            }}
+            onBlur={() => {
+              setTimeout(() => setShowSuggestions(false), 100);
+            }}
+            placeholder='Enter GitHub username'
+          />
+
+          <SuggestionDropdown
+            suggestions={suggestions || []}
+            show={showSuggestions}
+            onSelect={(selected) => {
+              setUsername(selected);
+              setShowSuggestions(false);
+
+              if (submittedUsername !== selected) {
+                setSubmittedUsername(selected);
+              } else {
+                refetch(); // force fetch again if same user
+              }
+
+              setRecentUsers((prev) => {
+                const updated = [selected, ...prev.filter((u) => u !== selected)];
+                return updated.slice(0, 5);
+              });
+            }}
+          />
+        </div>
         <button type='submit'>Search</button>
       </form>
 
@@ -77,7 +137,12 @@ const UserSearch = () => {
           onSelect={(usename)=>{
             setUsername(usename)
             setSubmittedUsername(usename)
-          
+          }}
+          onPrefetch={(user) => {
+            queryClient.prefetchQuery({
+              queryKey: ['users', user],
+              queryFn: () => fetchGitHubUser(user),
+            })
           }} />
         )
       }
